@@ -1,0 +1,7 @@
+{
+  "name": "@hypercore/runtime-typescript",
+  "private": true,
+  "type": "commonjs",
+  "scripts": { "build": "tsc -p ../../sdk/typescript/tsconfig.json" },
+  "engines": { "node": ">=18" }
+}

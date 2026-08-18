@@ -7,7 +7,7 @@ platform or user environment variables.
 from typing import Final
 
 CORE_NAME: Final[str] = "HyperCore"
-CORE_VERSION: Final[str] = "0.3.0"
+CORE_VERSION: Final[str] = "0.5.0"
 CORE_DEBUG: Final[bool] = False
 LOG_LEVEL: Final[str] = "INFO"
 PLUGIN_FAIL_STRATEGY: Final[str] = "stop"

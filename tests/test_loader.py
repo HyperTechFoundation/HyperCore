@@ -86,3 +86,16 @@ class PluginLoaderTests(unittest.IsolatedAsyncioTestCase):
                 await loader.load_all()
 
         self.assertEqual(len(core.errors), 1)
+
+    async def test_load_all_rejects_missing_dependency(self) -> None:
+        core = _DummyCore()
+        module = types.SimpleNamespace(
+            PLUGIN_MANIFEST=PluginManifest(
+                name="dependent", version="0.5.0", description="Dependent",
+                dependencies=("base",),
+            ), setup=lambda loaded_core: None,
+        )
+        with patch("hypercore.core.loader.importlib.import_module", return_value=module):
+            loader = PluginLoader(core, modules=("hypercore.plugins.dependent",))
+            with self.assertRaisesRegex(RuntimeError, "dependencies missing"):
+                await loader.load_all()

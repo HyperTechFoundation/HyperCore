@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Awaitable, Callable
 
 from hypercore.core.errors import CommandError, PlatformError, PermissionDeniedError
@@ -40,6 +41,7 @@ class CommandSpec:
     usage: str | None = None
     aliases: tuple[str, ...] = ()
     platforms: tuple[str, ...] = ()
+    owner: str | None = None
 
     @property
     def all_names(self) -> tuple[str, ...]:
@@ -126,6 +128,16 @@ class CommandRegistry:
         self._core = core
         self._commands: dict[str, _RegisteredCommand] = {}
         self._registered_specs: dict[str, _RegisteredCommand] = {}
+        self._owner: str | None = None
+
+    @contextmanager
+    def plugin_scope(self, owner: str):
+        previous = self._owner
+        self._owner = owner
+        try:
+            yield
+        finally:
+            self._owner = previous
 
     def register(
         self,
@@ -137,6 +149,7 @@ class CommandRegistry:
         usage: str | None = None,
         aliases: tuple[str, ...] = (),
         platforms: tuple[str, ...] = (),
+        owner: str | None = None,
     ) -> CommandSpec:
         normalized = _normalize_command_name(name)
         if not normalized:
@@ -159,6 +172,7 @@ class CommandRegistry:
             usage=usage.strip() if usage else None,
             aliases=normalized_aliases,
             platforms=tuple(platform.strip() for platform in platforms if platform.strip()),
+            owner=owner or self._owner,
         )
         registered = _RegisteredCommand(
             spec=spec,

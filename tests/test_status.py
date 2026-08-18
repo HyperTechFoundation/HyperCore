@@ -44,7 +44,7 @@ class CoreStatusServiceTests(unittest.IsolatedAsyncioTestCase):
         status = await service.collect(platform)
 
         self.assertEqual(status.core_name, "HyperCore")
-        self.assertEqual(status.core_version, "0.3.0")
+        self.assertEqual(status.core_version, "0.5.0")
         self.assertEqual(status.uptime, timedelta(hours=2, minutes=5))
         self.assertEqual(status.request_platform_name, "Telethon")
         self.assertEqual(status.request_platform_version, "1.40.0")
