@@ -1,69 +1,51 @@
 # HyperCore
 
-HyperCore is a minimal Telegram core for userbot-first deployments with optional bot polling support. V0.3.0 is scoped to proving that the core boots, loads commands, persists sudo users, performs git-based updates, and restarts cleanly in a real Telegram environment.
+HyperCore is a small Python-first Telegram core for userbot deployments with optional bot polling. Version 0.5.0 adds TypeScript as another way to build plugins without creating a second core.
 
-## Requirements
+## Architecture
 
-- Python 3.11
-- telethon
-- python-telegram-bot
-- Git
-- Bash for `bash startup`
+The Python kernel remains the source of truth for commands, authorization, events, lifecycle, storage, and platform adapters. An optional Node process hosts TypeScript plugins and talks to the kernel through versioned JSON messages over stdin/stdout. The external process receives capabilities through messages, not internal Python objects.
 
-Install the Telegram libraries before running the core.
+## Plugins
 
-```bash
-pip install telethon python-telegram-bot
+Python plugins live in `hypercore/plugins/`, expose `PLUGIN_MANIFEST`, and define `setup(core)`. If no module list is supplied, the loader discovers package modules and validates stable IDs, versions, dependencies, commands, events, capabilities, and runtime.
+
+The event bus keeps a bounded history and supports `on()`/`off()` subscriptions. Lifecycle hooks remain simple sync-or-async callbacks and retain the existing error policy.
+
+## TypeScript plugins
+
+The Node host is `runtimes/typescript/src/runtime.js`; the SDK source is under `sdk/typescript/src`. A plugin has one contract: exported `manifest`, `setup(context)`, and optional `shutdown()`. Commands and event subscriptions are registered from `setup`; there is no second `execute()` API. Build the SDK with TypeScript, then point `.env` at a plugin entry point:
+
+```text
+TYPESCRIPT_PLUGIN=plugins/examples/typescript/ping.js
 ```
 
-## Configuration
+The example plugin exposes `tsping`, handles `startup_complete`, and has a clean shutdown hook. The included `.js` file is directly runnable for tests; `ping.ts` demonstrates the SDK authoring API.
 
-Edit the single root `.env` file.
+## Protocol
 
-Required:
+Each line is one JSON object with `protocol_version`, `type`, optional `request_id`, and an object `payload`. V0.5.0 uses `runtime.initialize`, `runtime.ready`, `command.execute`, `command.response`, `event.emit`, `event.ack`, and `runtime.shutdown`. stdout is reserved for protocol traffic; runtime diagnostics go to stderr.
 
-- `API_ID`
-- `API_HASH`
+## Configuration and development
 
-Optional:
+Python 3.11+ and the Telegram libraries are required. Edit the root `.env` with `API_ID` and `API_HASH`; `BOT_TOKEN`, `DATABASE_URL`, `LOG_CHANNEL`, and `TYPESCRIPT_PLUGIN` are optional. Run with `bash startup` or `python -m hypercore`.
 
-- `BOT_TOKEN`
-- `DATABASE_URL`
-- `LOG_CHANNEL`
-
-Notes:
-
-- Core engine values live in `hypercore/core/config.py` and are not controlled by `.env`.
-- `DATABASE_URL` supports SQLite paths in V0.3.0, for example `sqlite:///hypercore.db`.
-- Logging is console-only in V0.3.0.
-
-## Run
+Run the test suite with:
 
 ```bash
-bash startup
+python -m unittest discover -s tests -v
 ```
 
-You can also run the module directly.
+Run the credential-free health check with:
 
 ```bash
-python -m hypercore
+python -m hypercore --health
 ```
 
-## Commands
+It validates the Python core, plugins, protocol, process runtime, storage, and clean startup/shutdown. Node.js and TypeScript are optional; when unavailable they are reported as a warning rather than a core failure.
 
-- `.ping`
-- `.uptime`
-- `.stats`
-- `.addsudo <user_id>` or reply with `.addsudo`
-- `.rmsudo <user_id>` or reply with `.rmsudo`
-- `.vsudos`
-- `.update -core`
-- `.restart`
-- `.shutdown`
+Node is only required when a TypeScript plugin is enabled. The TypeScript SDK can be compiled with the local project’s TypeScript toolchain and is intentionally dependency-light.
 
-## Runtime Notes
+## Migration
 
-- The userbot is the primary runtime and determines the owner account.
-- The bot runtime starts only when `BOT_TOKEN` is configured.
-- Updates use `git pull --ff-only`.
-- Restart uses full process replacement through `python -m hypercore`.
+Existing Python plugins continue to work. Their old `name`, `version`, `description`, `commands`, and `platforms` manifest fields remain valid; new fields are optional. V0.5.0 changes the core version and adds discovery, but does not require a Python plugin rewrite.

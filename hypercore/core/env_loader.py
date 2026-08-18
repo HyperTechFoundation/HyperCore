@@ -25,6 +25,7 @@ class PlatformEnv:
     database_url: str | None
     log_channel: str | None
     env_path: Path
+    typescript_plugin: Path | None = None
 
 
 def project_root() -> Path:
@@ -60,6 +61,7 @@ def load_platform_env(env_path: Path | None = None) -> PlatformEnv:
         database_url=_optional_value(values, "DATABASE_URL"),
         log_channel=_optional_value(values, "LOG_CHANNEL"),
         env_path=path,
+        typescript_plugin=_optional_path(values, "TYPESCRIPT_PLUGIN", path.parent),
     )
 
 
@@ -99,6 +101,14 @@ def _optional_value(values: dict[str, str], key: str) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def _optional_path(values: dict[str, str], key: str, root: Path) -> Path | None:
+    value = _optional_value(values, key)
+    if value is None:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else (root / path).resolve()
 
 
 __all__ = ["PlatformEnv", "load_platform_env", "project_root"]

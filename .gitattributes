@@ -1,0 +1,6 @@
+# Keep repository text deterministic across platforms.
+* text=auto eol=lf
+
+# Windows command files remain CRLF-compatible when checked out on Windows.
+*.cmd text eol=crlf
+*.bat text eol=crlf
