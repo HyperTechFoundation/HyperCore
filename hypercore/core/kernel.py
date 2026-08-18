@@ -18,6 +18,7 @@ from hypercore.core.events import CoreEventBus, CoreEventType
 from hypercore.core.instance_guard import InstanceGuard
 from hypercore.core.lifecycle import LifecycleManager, LifecycleStage
 from hypercore.core.loader import PluginLoader
+from hypercore.core.plugin_manager import PluginManager
 from hypercore.core.logger import configure_logging, log_exception
 from hypercore.core.platforms import PlatformInfo
 from hypercore.core.status import CoreStatusService
@@ -40,6 +41,7 @@ class HyperCoreKernel:
         self.lifecycle = LifecycleManager()
         self.registry = CommandRegistry(self)
         self.loader = PluginLoader(self)
+        self.plugin_manager = PluginManager(self, loader=self.loader)
         self.status_service = CoreStatusService(self)
         self.updater = CoreUpdater(self.root_path)
         self.userbot: TelegramUserbot | None = None
@@ -49,11 +51,12 @@ class HyperCoreKernel:
         self._stop_event = asyncio.Event()
         self._restart_requested = False
         self._shutdown_started = False
+        self._signal_values: list[signal.Signals] = []
 
     async def run(self) -> int:
-        self._install_signal_handlers()
         try:
             self.instance_guard.acquire(self.runtime_mode)
+            self._install_signal_handlers()
             await self._bootstrap()
             await self.lifecycle.run(
                 LifecycleStage.AFTER_START,
@@ -64,6 +67,7 @@ class HyperCoreKernel:
             await self._stop_event.wait()
         finally:
             await self._shutdown()
+            self._remove_signal_handlers()
 
         if self._restart_requested:
             self._restart_process()
@@ -76,7 +80,8 @@ class HyperCoreKernel:
 
         self.registry = CommandRegistry(self)
         self.loader = PluginLoader(self)
-        await self.loader.load_all()
+        self.plugin_manager = PluginManager(self, loader=self.loader)
+        await self.plugin_manager.start()
 
         if self.runtime_mode in {"both", "userbot"}:
             self.userbot = TelegramUserbot(self, self.env)
@@ -107,7 +112,7 @@ class HyperCoreKernel:
             CoreEventType.STARTUP_COMPLETE,
             runtime_mode=self.runtime_mode,
             storage_mode=self.store.mode,
-            plugin_count=len(self.loader.loaded_plugins),
+            plugin_count=len(self.plugin_manager.loaded_plugins),
         )
 
     async def handle_incoming_message(
@@ -192,6 +197,11 @@ class HyperCoreKernel:
                 self.log_exception("Failed to stop userbot", exc)
 
         try:
+            await self.plugin_manager.stop()
+        except Exception as exc:
+            self.log_exception("Failed to stop external runtimes", exc)
+
+        try:
             await self.store.close()
         except Exception as exc:
             self.log_exception("Failed to close state store", exc)
@@ -217,8 +227,21 @@ class HyperCoreKernel:
             signal_value = getattr(signal, signal_name)
             try:
                 loop.add_signal_handler(signal_value, self.request_shutdown)
+                self._signal_values.append(signal_value)
             except (NotImplementedError, RuntimeError):
                 continue
+
+    def _remove_signal_handlers(self) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        for signal_value in self._signal_values:
+            try:
+                loop.remove_signal_handler(signal_value)
+            except (NotImplementedError, RuntimeError):
+                continue
+        self._signal_values.clear()
 
 
 __all__ = ["HyperCoreKernel"]
